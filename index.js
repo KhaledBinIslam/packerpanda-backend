@@ -206,6 +206,58 @@ app.delete('/users/:id', async (req, res) => {
 });
 
 
+ // Add comment to an order
+    app.post('/orders/:id/comment', async (req, res) => {
+      const orderId = req.params.id;
+      const { comment } = req.body;
+
+      if (!comment || comment.trim() === "") {
+        return res.status(400).send({ message: "Comment is required" });
+      }
+
+      try {
+        const result = await ordersCollection.updateOne(
+          { _id: new ObjectId(orderId) },
+          {
+            $push: {
+              comments: { text: comment, createdAt: new Date() }
+            }
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "Order not found" });
+        }
+
+        res.send({ message: "Comment added successfully" });
+      } catch (error) {
+        console.error("Error adding comment:", error);
+        res.status(500).send({ message: "Failed to add comment" });
+      }
+    });
+
+    // Get all comments for a specific order
+    app.get('/orders/:id/comments', async (req, res) => {
+      const orderId = req.params.id;
+
+      try {
+        const order = await ordersCollection.findOne(
+          { _id: new ObjectId(orderId) },
+          { projection: { comments: 1 } } // শুধু comments ফেরত দেবে
+        );
+
+        if (!order) {
+          return res.status(404).send({ message: "Order not found" });
+        }
+
+        res.send(order.comments || []);
+      } catch (error) {
+        console.error("Error fetching comments:", error);
+        res.status(500).send({ message: "Failed to fetch comments" });
+      }
+    });
+
+
 
 
 
