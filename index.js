@@ -258,6 +258,39 @@ app.delete('/users/:id', async (req, res) => {
     });
 
 
+    // Get order summary by customer phone
+// app.get('/orders/summary', async (req, res) => {
+//   const phone = req.query.phone;
+//   if (!phone) return res.status(400).json({ error: 'Phone is required' });
+
+//   const fullPhone = phone.startsWith('+') ? phone : '+880' + phone;
+
+//   try {
+//     const userOrders = await ordersCollection.find({ customerPhone: fullPhone }).toArray();
+//     const delivered = userOrders.filter(o => o.status === 'Delivered').length;
+//     const returned = userOrders.filter(o => o.status === 'Returned').length;
+
+//     res.json({ total: userOrders.length, delivered, returned });
+//   } catch (error) {
+//     console.error('Error fetching order summary:', error);
+//     res.status(500).json({ error: 'Failed to fetch order summary' });
+//   }
+// });
+
+// app.get('/orders', async (req, res) => {
+//   const { customerPhone } = req.query;
+//   let query = {};
+//   if (customerPhone) {
+//     query.customerPhone = customerPhone;
+//   }
+//   try {
+//     const result = await ordersCollection.find(query).toArray();
+//     res.send(result);
+//   } catch (err) {
+//     res.status(500).send({ error: 'Failed to fetch orders' });
+//   }
+// });
+
 
 
 
