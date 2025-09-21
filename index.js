@@ -8,7 +8,25 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const port = process.env.PORT || 5000;
 const app = express();
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
+// const transporter = nodemailer.createTransport({
+//   service: "gmail",
+//   auth: {
+//     user: process.env.EMAIL_USER,
+//     pass: process.env.EMAIL_PASS,
+//   },
+// });
+const transporter = nodemailer.createTransport({
+  host: "smtp.hostinger.com",
+  port: 465, // TLS এর জন্য 587 ও ব্যবহার করা যায়
+  secure: true, // 465 হলে true, 587 হলে false
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 app.use(express.json());
 app.use(cors());
 
@@ -80,6 +98,28 @@ async function run() {
       }
     });
 
+
+    // Delete order by ID
+//   app.delete('/orders/:id', async (req, res) => {
+//   const { id } = req.params;
+
+//   if (!ObjectId.isValid(id)) {
+//     return res.status(400).json({ message: 'Invalid order ID' });
+//   }
+
+//   const result = await ordersCollection.deleteOne({ _id: new ObjectId(id) }); // correct
+// });
+
+
+app.delete('/orders/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await ordersCollection.deleteOne({ _id: new ObjectId(id) });
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ error: 'Failed to delete order' });
+      }
+    });
     // Bulk update orders from Excel data
     // app.post('/orders/bulk-update', async (req, res) => {
     //   const updates = req.body;
@@ -204,6 +244,125 @@ async function run() {
         res.status(500).send({ error: 'Failed to delete user' });
       }
     });
+
+    // Get users by email
+    app.get('/users/by-email', async (req, res) => {
+      const { email } = req.query;
+      if (!email) return res.status(400).json({ message: "Email is required" });
+
+      try {
+        const user = await usersCollection.findOne({ email });
+        res.json(user);
+      } catch (err) {
+        res.status(500).json({ message: "Failed to fetch user" });
+      }
+    });
+
+    // Verify Password
+    app.post('/users/verify-password', async (req, res) => {
+      const { email, currentPassword } = req.body;
+      if (!email || !currentPassword)
+        return res.status(400).json({ message: "Email and password required" });
+
+      try {
+        const user = await usersCollection.findOne({ email });
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        if (user.password !== currentPassword) // যদি তুমি হ্যাশ না use করো
+          return res.status(400).json({ message: "Invalid password" });
+
+        res.json({ message: "Verified" });
+      } catch (err) {
+        res.status(500).json({ message: "Verification failed" });
+      }
+    });
+
+    // Update Password (তুমি ইতিমধ্যে add করেছো, ঠিক আছে)
+    app.put('/users/update-password', async (req, res) => {
+      const { email, currentPassword, newPassword } = req.body;
+      if (!email || !currentPassword || !newPassword)
+        return res.status(400).json({ message: "All fields are required" });
+
+      try {
+        const user = await usersCollection.findOne({ email });
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        if (user.password !== currentPassword)
+          return res.status(400).json({ message: "Current password is wrong" });
+
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: { password: newPassword } }
+        );
+
+        res.json({ message: "Password updated successfully" });
+      } catch (err) {
+        res.status(500).json({ message: "Failed to update password" });
+      }
+    });
+
+    // Forgot Password
+    app.post('/users/forgot-password', async (req, res) => {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ message: "Email is required" });
+
+      try {
+        const user = await usersCollection.findOne({ email });
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        // Create a reset token & expiry
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        const resetExpires = Date.now() + 3600000; // 1 hour
+
+        await usersCollection.updateOne(
+          { email },
+          { $set: { resetToken, resetExpires } }
+        );
+
+        const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}&email=${email}`;
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: "Password Reset Request",
+          html: `<p>Click the link to reset your password:</p>
+             <a href="${resetLink}">${resetLink}</a>
+             <p>Link expires in 1 hour.</p>`
+        });
+
+        res.json({ message: `Reset link sent to ${email}` });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to send reset link" });
+      }
+    });
+    app.post('/users/reset-password', async (req, res) => {
+      const { email, token, newPassword } = req.body;
+      if (!email || !token || !newPassword)
+        return res.status(400).json({ message: "All fields are required" });
+
+      try {
+        const user = await usersCollection.findOne({ email, resetToken: token });
+        if (!user) return res.status(400).json({ message: "Invalid token" });
+        if (Date.now() > user.resetExpires)
+          return res.status(400).json({ message: "Token expired" });
+
+        await usersCollection.updateOne(
+          { email },
+          {
+            $set: { password: newPassword },
+            $unset: { resetToken: "", resetExpires: "" }
+          }
+        );
+
+        res.json({ message: "Password reset successfully" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to reset password" });
+      }
+    });
+
+
 
 
     // Add comment to an order
